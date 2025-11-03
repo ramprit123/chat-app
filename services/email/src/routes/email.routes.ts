@@ -2,18 +2,22 @@ import { Router } from 'express';
 import { EmailModel } from '../models/email.model';
 import { rabbitmq } from '../lib/rabbitmq';
 import { emailService } from "../lib/emailService";
+import {
+  catchAsync,
+  ValidationError,
+  NotFoundError,
+} from "../middleware/errorHandler";
 
 const router = Router();
 
 // Send email directly (synchronous)
-router.post("/send", async (req, res) => {
-  try {
+router.post(
+  "/send",
+  catchAsync(async (req, res) => {
     const { to, subject, text, html, type = "custom" } = req.body;
 
     if (!to || !subject) {
-      return res.status(400).json({
-        error: "Missing required fields: to, subject",
-      });
+      throw new ValidationError("Missing required fields: to, subject");
     }
 
     // Save email to database
@@ -38,25 +42,24 @@ router.post("/send", async (req, res) => {
     await email.save();
 
     res.status(success ? 200 : 500).json({
-      id: email._id,
-      status: email.status,
+      status: success ? "success" : "error",
       message: success ? "Email sent successfully" : "Failed to send email",
+      data: {
+        id: email._id,
+        status: email.status,
+      },
     });
-  } catch (error) {
-    console.error("Error in /send route:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
 // Queue email for background processing
-router.post("/queue", async (req, res) => {
-  try {
+router.post(
+  "/queue",
+  catchAsync(async (req, res) => {
     const { to, subject, text, html, type = "custom" } = req.body;
 
     if (!to || !subject) {
-      return res.status(400).json({
-        error: "Missing required fields: to, subject",
-      });
+      throw new ValidationError("Missing required fields: to, subject");
     }
 
     const email = await EmailModel.create({
@@ -81,30 +84,30 @@ router.post("/queue", async (req, res) => {
       email.status = "failed";
       await email.save();
       return res.status(500).json({
-        error: "Failed to queue email - RabbitMQ unavailable",
+        status: "error",
+        message: "Failed to queue email - RabbitMQ unavailable",
       });
     }
 
     res.status(202).json({
-      id: email._id,
-      status: "queued",
+      status: "success",
       message: "Email queued for processing",
+      data: {
+        id: email._id,
+        status: "queued",
+      },
     });
-  } catch (error) {
-    console.error("Error in /queue route:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
 // Send welcome email
-router.post("/welcome", async (req, res) => {
-  try {
+router.post(
+  "/welcome",
+  catchAsync(async (req, res) => {
     const { to, userName } = req.body;
 
     if (!to || !userName) {
-      return res.status(400).json({
-        error: "Missing required fields: to, userName",
-      });
+      throw new ValidationError("Missing required fields: to, userName");
     }
 
     const email = await EmailModel.create({
@@ -127,27 +130,28 @@ router.post("/welcome", async (req, res) => {
     await email.save();
 
     res.status(success ? 200 : 500).json({
-      id: email._id,
-      status: email.status,
+      status: success ? "success" : "error",
       message: success
         ? "Welcome email sent successfully"
         : "Failed to send welcome email",
+      data: {
+        id: email._id,
+        status: email.status,
+      },
     });
-  } catch (error) {
-    console.error("Error in /welcome route:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
 // Send password reset email
-router.post("/password-reset", async (req, res) => {
-  try {
+router.post(
+  "/password-reset",
+  catchAsync(async (req, res) => {
     const { to, userName, resetToken } = req.body;
 
     if (!to || !userName || !resetToken) {
-      return res.status(400).json({
-        error: "Missing required fields: to, userName, resetToken",
-      });
+      throw new ValidationError(
+        "Missing required fields: to, userName, resetToken"
+      );
     }
 
     const email = await EmailModel.create({
@@ -174,27 +178,28 @@ router.post("/password-reset", async (req, res) => {
     await email.save();
 
     res.status(success ? 200 : 500).json({
-      id: email._id,
-      status: email.status,
+      status: success ? "success" : "error",
       message: success
         ? "Password reset email sent successfully"
         : "Failed to send password reset email",
+      data: {
+        id: email._id,
+        status: email.status,
+      },
     });
-  } catch (error) {
-    console.error("Error in /password-reset route:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
 // Send notification email
-router.post("/notification", async (req, res) => {
-  try {
+router.post(
+  "/notification",
+  catchAsync(async (req, res) => {
     const { to, userName, message } = req.body;
 
     if (!to || !userName || !message) {
-      return res.status(400).json({
-        error: "Missing required fields: to, userName, message",
-      });
+      throw new ValidationError(
+        "Missing required fields: to, userName, message"
+      );
     }
 
     const email = await EmailModel.create({
@@ -221,45 +226,49 @@ router.post("/notification", async (req, res) => {
     await email.save();
 
     res.status(success ? 200 : 500).json({
-      id: email._id,
-      status: email.status,
+      status: success ? "success" : "error",
       message: success
         ? "Notification email sent successfully"
         : "Failed to send notification email",
+      data: {
+        id: email._id,
+        status: email.status,
+      },
     });
-  } catch (error) {
-    console.error("Error in /notification route:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
 // Get email status
-router.get("/:id", async (req, res) => {
-  try {
+router.get(
+  "/:id",
+  catchAsync(async (req, res) => {
     const email = await EmailModel.findById(req.params.id);
 
     if (!email) {
-      return res.status(404).json({ error: "Email not found" });
+      throw new NotFoundError("Email not found");
     }
 
     res.json({
-      id: email._id,
-      to: email.to,
-      subject: email.subject,
-      status: email.status,
-      type: email.type,
-      createdAt: email.createdAt,
-      sentAt: email.sentAt,
+      status: "success",
+      data: {
+        email: {
+          id: email._id,
+          to: email.to,
+          subject: email.subject,
+          status: email.status,
+          type: email.type,
+          createdAt: email.createdAt,
+          sentAt: email.sentAt,
+        },
+      },
     });
-  } catch (error) {
-    console.error("Error in GET /:id route:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
 // Get all emails (with pagination)
-router.get("/", async (req, res) => {
-  try {
+router.get(
+  "/",
+  catchAsync(async (req, res) => {
     const page = parseInt(req.query.page as string) || 1;
     const limit = parseInt(req.query.limit as string) || 10;
     const skip = (page - 1) * limit;
@@ -273,37 +282,39 @@ router.get("/", async (req, res) => {
     const total = await EmailModel.countDocuments();
 
     res.json({
-      emails,
-      pagination: {
-        page,
-        limit,
-        total,
-        pages: Math.ceil(total / limit),
+      status: "success",
+      results: emails.length,
+      data: {
+        emails,
+        pagination: {
+          page,
+          limit,
+          total,
+          pages: Math.ceil(total / limit),
+        },
       },
     });
-  } catch (error) {
-    console.error("Error in GET / route:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
 // Test email service connection
-router.get("/test/connection", async (req, res) => {
-  try {
+router.get(
+  "/test/connection",
+  catchAsync(async (req, res) => {
     const isReady = emailService.isReady();
     const isVerified = isReady ? await emailService.verifyConnection() : false;
 
     res.json({
-      configured: isReady,
-      verified: isVerified,
-      message: isVerified
-        ? "Email service is ready"
-        : "Email service is not configured or connection failed",
+      status: "success",
+      data: {
+        configured: isReady,
+        verified: isVerified,
+        message: isVerified
+          ? "Email service is ready"
+          : "Email service is not configured or connection failed",
+      },
     });
-  } catch (error) {
-    console.error("Error in /test/connection route:", error);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+  })
+);
 
 export default router;
